@@ -1,5 +1,6 @@
 from abc import ABC
 from enum import Enum
+from itertools import groupby
 from random import choice
 from typing import Optional
 
@@ -7,6 +8,11 @@ from typing import Optional
 class Color(Enum):
     RED = 1
     YELLOW = 2
+
+
+class Dim(Enum):
+    COL = 1
+    ROW = 2
 
 
 def color_to_letter(color: Optional[Color]) -> str:
@@ -18,16 +24,30 @@ def color_to_letter(color: Optional[Color]) -> str:
         return "Y"
 
 
+def longest_repeat(sequence: [any]) -> [any]:
+    if len(sequence) == 0:
+        return []
+
+    return sorted([list(g) for _, g in groupby(sequence)], key=len)[-1]
+
+
 class Board:
     def __init__(self) -> None:
         self.columns = [[], [], [], [], [], [], []]
 
-    def row(self, n: int) -> [Optional[Color]]:
+    def rows(self) -> [[Optional[Color]]]:
+        return [self.row(row) for row in range(6)]
+
+    def row(self, row: int) -> [Optional[Color]]:
         """Provides a list representation of the row at given index."""
         return [
-            self.columns[col][n] if len(self.columns[col]) > n else None
+            self.columns[col][row] if len(self.columns[col]) > row else None
             for col in range(7)
         ]
+
+    def col(self, col: int) -> [Optional[Color]]:
+        """Provides a list representation of the column at given index."""
+        return self.columns[col]
 
     def print(self):
         """Renders a representation of the board to stdout."""
@@ -44,18 +64,54 @@ class Board:
             )
         )
 
-    def is_legal_move(self, column: int) -> bool:
+    def is_legal_move(self, col: int) -> bool:
         """Tells whether given column index has open gaps."""
-        return column in self.legal_moves()
+        return col in self.legal_moves()
 
-    def register_move(self, color: Color, column: int):
+    def register_move(self, color: Color, col: int):
         """Puts a token of the given color into given column index."""
-        assert self.is_legal_move(column), "Not a legal move."
-        self.columns[column].append(color)
+        assert self.is_legal_move(col), "Not a legal move."
+        self.columns[col].append(color)
 
     def is_full(self) -> bool:
         """Tells whether all of the columns are filled."""
         return len(self.legal_moves()) == 0
+
+    def longest_repeat_specific(self, dim: Dim, index: int) -> Optional[dict]:
+        """Provides the longest repeat in given row or column."""
+        sequence: [Color] = longest_repeat(
+            (self.col if dim == Dim.COL else self.row)(index)
+        )
+
+        return (
+            {"color": sequence[0], "length": len(sequence), "dim": dim}
+            if len(sequence) > 0
+            else None
+        )
+
+    def longest_repeat(self) -> Optional[dict]:
+        """Provides the longest repeat of all rows and columns."""
+        col_entries = list(
+            map(lambda index: self.longest_repeat_specific(Dim.COL, index), range(0, 7))
+        )
+        row_entries = list(
+            map(lambda index: self.longest_repeat_specific(Dim.ROW, index), range(0, 6))
+        )
+
+        all_entries = col_entries + row_entries
+
+        max_entry = max(
+            all_entries, key=(lambda entry: entry["length"] if entry is not None else 0)
+        )
+
+        if max_entry is None:
+            return None
+
+        max_entry["index"] = (
+            col_entries if max_entry["dim"] == Dim.COL else row_entries
+        ).index(max_entry)
+
+        return max_entry
 
 
 class Player(ABC):
@@ -90,7 +146,14 @@ class Game:
     def is_finished(self) -> bool:
         """Tells whether the game has ended (board is full or one player has connected four)."""
         # TODO: check for winner
-        return self.board.is_full()
+        return self.board.is_full() or self.check_winner() is not None
+
+    def check_winner(self) -> Optional[Color]:
+        """Provides the winner of the game, if there is any."""
+        longest_repeat = self.board.longest_repeat()
+        if longest_repeat is None:
+            return None
+        return longest_repeat["color"] if longest_repeat["length"] >= 4 else None
 
 
 if __name__ == "__main__":
@@ -98,5 +161,9 @@ if __name__ == "__main__":
 
     while not game.is_finished():
         game.step()
-        game.board.print()
-        print("\n")
+        # game.board.print()
+        # print("\n")
+
+    game.board.print()
+    print("\n")
+    print("Winner:", game.check_winner())
