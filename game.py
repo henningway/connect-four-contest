@@ -1,9 +1,13 @@
 from abc import ABC
+import asyncio
 from enum import Enum
 from functools import reduce
 from itertools import groupby
 from random import choice
 from typing import Optional
+
+
+LAST_PRINT_LEN = 0
 
 
 class Color(Enum):
@@ -14,6 +18,21 @@ class Color(Enum):
 class Dim(Enum):
     COL = 1
     ROW = 2
+
+
+def reprint(msg, finish=False):
+    global LAST_PRINT_LEN
+
+    print(" " * LAST_PRINT_LEN, end="\r")
+
+    if finish:
+        end = "\n"
+        LAST_PRINT_LEN = 0
+    else:
+        end = "\r"
+        LAST_PRINT_LEN = len(msg)
+
+    print(msg, end=end)
 
 
 def color_to_letter(color: Optional[Color], empty_char=".") -> str:
@@ -155,13 +174,14 @@ class Player(ABC):
         super().__init__()
         self.color = color
 
-    def nextMove(self, board: Board) -> int:
+    async def next_move(self, board: Board) -> int:
         """Provides a column index to place a token of the player's color in."""
         pass
 
 
 class MonkeyPlayer(Player):
-    def nextMove(self, board: Board) -> int:
+    async def next_move(self, board: Board) -> int:
+        # await asyncio.sleep(0.001)
         return choice(board.legal_moves())
 
 
@@ -170,33 +190,83 @@ class Game:
         self.board = Board()
         self.p1 = p1
         self.p2 = p2
-        self.activePlayer = self.p1
+        self.active_player = self.p1
+        self.default_winner = None
 
-    def step(self):
+    async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        self.board.register_move(
-            self.activePlayer.color, self.activePlayer.nextMove(self.board)
-        )
-        self.activePlayer = self.p1 if self.activePlayer is self.p2 else self.p2
+        next_move = await self.active_player.next_move(self.board)
+        self.board.register_move(self.active_player.color, next_move)
+        self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 
     def is_finished(self) -> bool:
         """Tells whether the game has ended (board is full or one player has connected four)."""
-        return self.board.is_full() or self.check_winner() is not None
+        return self.board.is_full() or self.winner() is not None
 
-    def check_winner(self) -> Optional[Color]:
+    def winner(self) -> Optional[Color]:
         """Provides the winner of the game, if there is any."""
+        if self.default_winner is not None:
+            return self.default_winner.color
+
         longest_repeat = self.board.longest_sequence()
         if longest_repeat is None:
             return None
         return longest_repeat["color"] if longest_repeat["length"] >= 4 else None
 
+    def default(self):
+        self.default_winner = self.p1 if self.active_player is self.p2 else self.p2
+
+
+class Simulation:
+    @staticmethod
+    async def single(p1: Player, p2: Player) -> Color:
+        game = Game(p1, p2)
+
+        try:
+            while not game.is_finished():
+                await asyncio.wait_for(game.step(), 0.1)
+        except asyncio.exceptions.TimeoutError:
+            print(game.active_player.color, "timed out!")
+            game.default()
+
+        game.board.print()
+        print(
+            "Winner:",
+            game.winner(),
+            "(won by default)" if game.default_winner is not None else "",
+        )
+
+    @staticmethod
+    async def many(
+        p1: Player, p2: Player, runs: int, max_ms_per_step: int = 0.1
+    ) -> Game:
+        winners = []
+        percentage = "0%"
+
+        for i in range(0, runs):
+            percentage = f"{round(i/runs*100)}%"
+            reprint(percentage)
+
+            game = Game(p1, p2)
+
+            try:
+                while not game.is_finished():
+                    await asyncio.wait_for(game.step(), max_ms_per_step * 1000)
+            except:
+                game.default()
+            winners.append(game.winner())
+
+        get_length = lambda color: len(list(filter(lambda w: w == color, winners)))
+
+        print(
+            f"Red won {get_length(Color.RED)} games, while yellow won {get_length(Color.YELLOW)} games (draws: {get_length(None)})."
+        )
+
 
 if __name__ == "__main__":
-    game = Game(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW))
+    loop = asyncio.get_event_loop()
 
-    while not game.is_finished():
-        game.step()
-
-    game.board.print()
-    print("\n")
-    print("Winner:", game.check_winner())
+    loop.run_until_complete(
+        # Simulation.single(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW))
+        Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
+    )
