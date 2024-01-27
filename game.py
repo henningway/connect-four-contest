@@ -1,5 +1,6 @@
 from abc import ABC
 from enum import Enum
+from functools import reduce
 from itertools import groupby
 from random import choice
 from typing import Optional
@@ -15,20 +16,44 @@ class Dim(Enum):
     ROW = 2
 
 
-def color_to_letter(color: Optional[Color]) -> str:
+def color_to_letter(color: Optional[Color], empty_char=".") -> str:
     if color is None:
-        return "."
+        return empty_char
     if color is Color.RED:
         return "R"
     if color is Color.YELLOW:
         return "Y"
 
 
-def longest_repeat(sequence: [any]) -> [any]:
-    if len(sequence) == 0:
+def letter_to_color(letter: str) -> Color:
+    if letter == " " or letter == ".":
+        return None
+    if letter == "R":
+        return Color.RED
+    if letter == "Y":
+        return Color.YELLOW
+
+
+def sequence_to_word(sequence: [Optional[Color]]) -> str:
+    return "".join(map(lambda color: color_to_letter(color, " "), sequence))
+
+
+def longest_repeat(word: [str]) -> [Optional[Color]]:
+    "Provides the longest consecutive sequence of characters in given word."
+    if len(word) == 0:
         return []
 
-    return sorted([list(g) for _, g in groupby(sequence)], key=len)[-1]
+    return sorted([list(g) for _, g in groupby(word)], key=len)[-1]
+
+
+def longest_color_repeat(sequence: [Optional[Color]]) -> [Color]:
+    "Provides the longest consecuctive non-nil sequence of colors."
+    words = sequence_to_word(sequence).split()
+
+    if len(words) == 0:
+        return []
+
+    return max(map(longest_repeat, words))
 
 
 class Board:
@@ -77,25 +102,36 @@ class Board:
         """Tells whether all of the columns are filled."""
         return len(self.legal_moves()) == 0
 
-    def longest_repeat_specific(self, dim: Dim, index: int) -> Optional[dict]:
-        """Provides the longest repeat in given row or column."""
-        sequence: [Color] = longest_repeat(
-            (self.col if dim == Dim.COL else self.row)(index)
-        )
+    def longest_sequence_specific(self, dim: Dim, index: int) -> Optional[dict]:
+        """Provides the longest consecutive sequence of one color in given row or column."""
+        sequence: [Optional[Color]] = (self.col if dim == Dim.COL else self.row)(index)
+
+        long_sequence: [str] = longest_color_repeat(sequence)
 
         return (
-            {"color": sequence[0], "length": len(sequence), "dim": dim}
-            if len(sequence) > 0
+            {
+                "color": letter_to_color(long_sequence[0]),
+                "length": len(long_sequence),
+                "dim": dim,
+            }
+            if len(long_sequence) > 0
             else None
         )
 
-    def longest_repeat(self) -> Optional[dict]:
-        """Provides the longest repeat of all rows and columns."""
+    # TODO: CHECK DIAGONALS
+    def longest_sequence(self) -> Optional[dict]:
+        """Provides the longest sequence of one color in all rows and columns."""
         col_entries = list(
-            map(lambda index: self.longest_repeat_specific(Dim.COL, index), range(0, 7))
+            map(
+                lambda index: self.longest_sequence_specific(Dim.COL, index),
+                range(0, 7),
+            )
         )
         row_entries = list(
-            map(lambda index: self.longest_repeat_specific(Dim.ROW, index), range(0, 6))
+            map(
+                lambda index: self.longest_sequence_specific(Dim.ROW, index),
+                range(0, 6),
+            )
         )
 
         all_entries = col_entries + row_entries
@@ -145,12 +181,11 @@ class Game:
 
     def is_finished(self) -> bool:
         """Tells whether the game has ended (board is full or one player has connected four)."""
-        # TODO: check for winner
         return self.board.is_full() or self.check_winner() is not None
 
     def check_winner(self) -> Optional[Color]:
         """Provides the winner of the game, if there is any."""
-        longest_repeat = self.board.longest_repeat()
+        longest_repeat = self.board.longest_sequence()
         if longest_repeat is None:
             return None
         return longest_repeat["color"] if longest_repeat["length"] >= 4 else None
@@ -161,8 +196,6 @@ if __name__ == "__main__":
 
     while not game.is_finished():
         game.step()
-        # game.board.print()
-        # print("\n")
 
     game.board.print()
     print("\n")
