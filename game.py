@@ -2,7 +2,7 @@ from abc import ABC
 import asyncio
 from enum import Enum
 from functools import reduce
-from itertools import groupby
+from itertools import groupby, repeat
 from random import choice
 from typing import Optional
 
@@ -18,6 +18,8 @@ class Color(Enum):
 class Dim(Enum):
     COL = 1
     ROW = 2
+    DIAG_CLOCKWISE = 3
+    DIAG_COUNTER_CLOCKWISE = 4
 
 
 def reprint(msg, finish=False):
@@ -75,27 +77,78 @@ def longest_color_repeat(sequence: [Optional[Color]]) -> [Color]:
     return max(map(longest_repeat, words))
 
 
+def transpose(matrix: [[any]]) -> [[any]]:
+    width = len(matrix)
+    height = len(matrix[0])
+
+    result = []
+
+    for i in range(height):
+        result.append([matrix[j][i] for j in range(width)])
+
+    return result
+
+
 class Board:
-    def __init__(self) -> None:
-        self.columns = [[], [], [], [], [], [], []]
+    def __init__(self, cols=7, rows=6) -> None:
+        self.col_count = cols
+        self.row_count = rows
+        self.diag_count = cols + rows - 1
+        self.columns = [[] for _ in range(cols)]
 
     def rows(self) -> [[Optional[Color]]]:
-        return [self.row(row) for row in range(6)]
+        return [self.row(row) for row in range(self.row_count)]
 
-    def row(self, row: int) -> [Optional[Color]]:
+    def diags_clockwise(self) -> [[Optional[Color]]]:
+        """
+        Provides a list representation of the diagonals produced by rotating the board clockwise 45 degrees.
+        """
+        skewed = [
+            list(repeat(None, row_index))
+            + row
+            + list(repeat(None, self.row_count - row_index - 1))
+            for row_index, row in enumerate(self.rows())
+        ]
+        return transpose(skewed)
+
+    def diags_counter_clockwise(self) -> [[Optional[Color]]]:
+        """
+        Provides a matrix representation of the diagonals produced by rotating the board counter-clockwise 45 degrees.
+
+        We achieve this by left-padding each row with a number of None's equal to the row's index, essentially skewing the board to the right. To make the matrix transposable we have to right-pad as well, in mirrored fashion to the left-padded None's.
+
+        By transposing, we get the columns of the skewed matrix, providing the diagonals.
+        """
+        skewed = [
+            list(repeat(None, self.row_count - row_index - 1))
+            + row
+            + list(repeat(None, row_index))
+            for row_index, row in enumerate(self.rows())
+        ]
+        return transpose(skewed)
+
+    def row(self, index: int) -> [Optional[Color]]:
         """Provides a list representation of the row at given index."""
         return [
-            self.columns[col][row] if len(self.columns[col]) > row else None
-            for col in range(7)
+            self.columns[col][index] if len(self.columns[col]) > index else None
+            for col in range(self.col_count)
         ]
 
-    def col(self, col: int) -> [Optional[Color]]:
+    def col(self, index: int) -> [Optional[Color]]:
         """Provides a list representation of the column at given index."""
-        return self.columns[col]
+        return self.columns[index]
+
+    def diag_clockwise(self, index: int) -> [Optional[Color]]:
+        """Provides a list represenation of the diagonal (obtained by clockwise rotation) at given index. Note that the result has padded None-values, which limits the utility of this function."""
+        return self.diags_clockwise()[index]
+
+    def diag_counter_clockwise(self, index: int) -> [Optional[Color]]:
+        """Provides a list represenation of the diagonal (obtained by counter-clockwise rotation) at given index. Note that the result has padded None-values, which limits the utility of this function."""
+        return self.diags_counter_clockwise()[index]
 
     def print(self):
         """Renders a representation of the board to stdout."""
-        for i in range(5, -1, -1):
+        for i in range(self.row_count - 1, -1, -1):
             row = list(map(color_to_letter, self.row(i)))
             print(row)
 
@@ -104,7 +157,9 @@ class Board:
         return list(
             map(
                 lambda tuple: tuple[0],
-                filter(lambda col: len(col[1]) < 6, enumerate(self.columns)),
+                filter(
+                    lambda col: len(col[1]) < self.row_count, enumerate(self.columns)
+                ),
             )
         )
 
@@ -123,7 +178,15 @@ class Board:
 
     def longest_sequence_specific(self, dim: Dim, index: int) -> Optional[dict]:
         """Provides the longest consecutive sequence of one color in given row or column."""
-        sequence: [Optional[Color]] = (self.col if dim == Dim.COL else self.row)(index)
+        sequence: [Optional[Color]] = (
+            self.col
+            if dim == Dim.COL
+            else self.row
+            if dim == Dim.ROW
+            else self.diag_clockwise
+            if dim == Dim.DIAG_CLOCKWISE
+            else self.diag_counter_clockwise
+        )(index)
 
         long_sequence: [str] = longest_color_repeat(sequence)
 
@@ -132,28 +195,42 @@ class Board:
                 "color": letter_to_color(long_sequence[0]),
                 "length": len(long_sequence),
                 "dim": dim,
+                "index": index,
             }
             if len(long_sequence) > 0
             else None
         )
 
-    # TODO: CHECK DIAGONALS
     def longest_sequence(self) -> Optional[dict]:
         """Provides the longest sequence of one color in all rows and columns."""
         col_entries = list(
             map(
                 lambda index: self.longest_sequence_specific(Dim.COL, index),
-                range(0, 7),
+                range(0, self.col_count),
             )
         )
         row_entries = list(
             map(
                 lambda index: self.longest_sequence_specific(Dim.ROW, index),
-                range(0, 6),
+                range(0, self.row_count),
+            )
+        )
+        diag_entries = list(
+            map(
+                lambda index: self.longest_sequence_specific(Dim.DIAG_CLOCKWISE, index),
+                range(0, self.diag_count),
+            )
+        )
+        diag_counter_entries = list(
+            map(
+                lambda index: self.longest_sequence_specific(
+                    Dim.DIAG_COUNTER_CLOCKWISE, index
+                ),
+                range(0, self.diag_count),
             )
         )
 
-        all_entries = col_entries + row_entries
+        all_entries = col_entries + row_entries + diag_entries + diag_counter_entries
 
         max_entry = max(
             all_entries, key=(lambda entry: entry["length"] if entry is not None else 0)
@@ -161,10 +238,6 @@ class Board:
 
         if max_entry is None:
             return None
-
-        max_entry["index"] = (
-            col_entries if max_entry["dim"] == Dim.COL else row_entries
-        ).index(max_entry)
 
         return max_entry
 
@@ -230,6 +303,7 @@ class Simulation:
             game.default()
 
         game.board.print()
+        
         print(
             "Winner:",
             game.winner(),
