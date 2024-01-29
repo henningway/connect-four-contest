@@ -51,6 +51,26 @@ class PlayerFaSKoe(Player):
 
     def can_color_win(self, board: Board, color: Color) -> int | None:
         seq = PlayerFaSKoe.sequences_by_color(board)
+        interlock = filter(lambda x: x["color"] == color and x["dim"] == Dim.ROW and x["length"] == 2, seq)
+        for option in interlock:
+            height_of_interlock = option["index"]
+            count = 0
+            for idx, point in enumerate(board.row(height_of_interlock)):
+                if count == 2:
+                    if point is None and board.row(height_of_interlock)[idx + 1] == color and self.resulting_row_if_inserted_in_col(board=board, col_idx=idx) == height_of_interlock:
+                        # interlock
+                        return idx
+                    if point is None and board.row(height_of_interlock)[idx - 4] == color and self.resulting_row_if_inserted_in_col(
+                        board=board,
+                        col_idx=idx - 3
+                    ) == height_of_interlock:
+                        return idx - 3
+                if point is None:
+                    count = 0
+                if point != color:
+                    count = 0
+                if point == color:
+                    count += 1
         win_options = filter(lambda x: x["color"] == color and x["length"] == 3, seq)
         # TODO: Row {- x o x x - x}
         for option in win_options:
