@@ -61,7 +61,7 @@ def sequence_to_word(sequence: [Optional[Color]]) -> str:
 
 
 def longest_repeat(word: [str]) -> [Optional[Color]]:
-    "Provides the longest consecutive sequence of characters in given word."
+    """Provides the longest consecutive sequence of characters in given word."""
     if len(word) == 0:
         return []
 
@@ -69,7 +69,7 @@ def longest_repeat(word: [str]) -> [Optional[Color]]:
 
 
 def longest_color_repeat(sequence: [Optional[Color]]) -> [Color]:
-    "Provides the longest consecuctive non-nil sequence of colors."
+    """Provides the longest consecutive non-nil sequence of colors."""
     words = sequence_to_word(sequence).split()
 
     if len(words) == 0:
@@ -140,11 +140,17 @@ class Board:
         return self.columns[index]
 
     def diag_clockwise(self, index: int) -> [Optional[Color]]:
-        """Provides a list represenation of the diagonal (obtained by clockwise rotation) at given index. Note that the result has padded None-values, which limits the utility of this function."""
+        """
+        Provides a list representation of the diagonal (obtained by clockwise rotation) at given index. Note that the
+        result has padded None-values, which limits the utility of this function.
+        """
         return self.diags_clockwise()[index]
 
     def diag_counter_clockwise(self, index: int) -> [Optional[Color]]:
-        """Provides a list represenation of the diagonal (obtained by counter-clockwise rotation) at given index. Note that the result has padded None-values, which limits the utility of this function."""
+        """
+        Provides a list representation of the diagonal (obtained by counter-clockwise rotation) at given index. Note
+        that the result has padded None-values, which limits the utility of this function.
+        """
         return self.diags_counter_clockwise()[index]
 
     def print(self):
@@ -157,7 +163,7 @@ class Board:
         """Provides a list of columns with open gaps (i.e. columns that are not full)."""
         return list(
             map(
-                lambda tuple: tuple[0],
+                lambda value: value[0],
                 filter(
                     lambda col: len(col[1]) < self.row_count, enumerate(self.columns)
                 ),
@@ -248,33 +254,41 @@ class Player(ABC):
         super().__init__()
         self.color = color
 
-    def next_move(self, board: Board) -> int:
-        """Provides a column index to place a token of the player's color in."""
+    def next_move(self, board: Board, max_sec_per_step: float) -> int:
+        """
+        Provides a column index to place a token of the player's color in. Should respect `max_sec_per_step` to not get
+        timed out (other player wins).
+        """
         pass
 
     @in_subprocess
-    def subprocess_next_move(self, board: Board) -> int:
-        """Provides a column index to place a token of the player's color in."""
-        return self.next_move(board)
+    def subprocess_next_move(self, board: Board, max_sec_per_step: float) -> int:
+        """
+        Provides a column index to place a token of the player's color in. Should respect `max_sec_per_step` to not get
+        timed out (other player wins).
+        """
+        return self.next_move(board, max_sec_per_step)
 
 
 class MonkeyPlayer(Player):
-    def next_move(self, board: Board) -> int:
+    def next_move(self, board: Board, max_sec_per_step: float) -> int:
+        print(max_sec_per_step)
         # sleep(DEFAULT_MOVE_TIMEOUT) # uncomment this to simulate timeouts/game defaulting
         return choice(board.legal_moves())
 
 
 class Game:
-    def __init__(self, p1: Player, p2: Player) -> None:
+    def __init__(self, p1: Player, p2: Player, max_sec_per_step: float) -> None:
         self.board = Board()
         self.p1 = p1
         self.p2 = p2
         self.active_player = self.p1
         self.default_winner = None
+        self.max_sec_per_step = max_sec_per_step
 
     async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        next_move = await self.active_player.subprocess_next_move(self.board)
+        next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
         self.board.register_move(self.active_player.color, next_move)
         self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 
@@ -306,7 +320,7 @@ class Simulation:
     @staticmethod
     async def single(p1: Player, p2: Player, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT):
         """Runs a single game and provides the final board and winner on stdout. p1 is the starting player."""
-        game = Game(p1, p2)
+        game = Game(p1, p2, max_sec_per_step)
 
         try:
             while not game.is_finished():
@@ -343,7 +357,7 @@ class Simulation:
             percentage = f"{round(i / runs * 100)}%"
             reprint(percentage)
 
-            game = Game(p1, p2) if i % 2 == 0 else Game(p2, p1)
+            game = Game(p1, p2, max_sec_per_step) if i % 2 == 0 else Game(p2, p1, max_sec_per_step)
 
             try:
                 while not game.is_finished():
