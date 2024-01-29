@@ -272,7 +272,6 @@ class Player(ABC):
 
 class MonkeyPlayer(Player):
     def next_move(self, board: Board, max_sec_per_step: float) -> int:
-        print(max_sec_per_step)
         # sleep(DEFAULT_MOVE_TIMEOUT) # uncomment this to simulate timeouts/game defaulting
         return choice(board.legal_moves())
 
