@@ -95,7 +95,7 @@ class Board:
         self.col_count = cols
         self.row_count = rows
         self.diag_count = cols + rows - 1
-        self.columns = [[] for _ in range(cols)]
+        self.columns = [[None for _ in range(rows)] for _ in range(cols)]
 
     def rows(self) -> [[Optional[Color]]]:
         return [self.row(row) for row in range(self.row_count)]
@@ -165,7 +165,8 @@ class Board:
             map(
                 lambda value: value[0],
                 filter(
-                    lambda col: len(col[1]) < self.row_count, enumerate(self.columns)
+                    lambda col: len(list(filter(lambda value: value is not None, col[1]))) < self.row_count,
+                    enumerate(self.columns)
                 ),
             )
         )
@@ -177,7 +178,9 @@ class Board:
     def register_move(self, color: Color, col: int):
         """Puts a token of the given color into given column index."""
         assert self.is_legal_move(col), "Not a legal move."
-        self.columns[col].append(color)
+        column = self.columns[col]
+        lowest_none_index: Optional[int] = next(filter(lambda x: x[1] is None, enumerate(column)))[0]
+        self.columns[col][lowest_none_index] = color
 
     def is_full(self) -> bool:
         """Tells whether all the columns are filled."""
@@ -316,6 +319,7 @@ class Simulation:
     Players have a limited amount of time for each move (`max_ms_per_step`) and get timed out when they take longer,
     defaulting the other player as winner of the game.
     """
+
     @staticmethod
     async def single(p1: Player, p2: Player, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT):
         """Runs a single game and provides the final board and winner on stdout. p1 is the starting player."""
