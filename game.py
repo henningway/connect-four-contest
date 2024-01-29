@@ -1,22 +1,21 @@
-from abc import ABC
 import asyncio
-from enum import Enum
+from abc import ABC
+from enum import Enum, IntEnum
 from itertools import groupby, repeat
 from pedantic import in_subprocess
 from random import choice
-from time import sleep
 from typing import Optional
 
-DEFAULT_MOVE_TIMEOUT = 0.1
+DEFAULT_MOVE_TIMEOUT = 2  ## * 10 ** 9
 LAST_PRINT_LEN = 0
 
 
-class Color(Enum):
+class Color(IntEnum):
     RED = 1
     YELLOW = 2
 
 
-class Dim(Enum):
+class Dim(IntEnum):
     COL = 1
     ROW = 2
     DIAG_CLOCKWISE = 3
@@ -153,13 +152,23 @@ class Board:
         """
         return self.diags_counter_clockwise()[index]
 
-    def print(self):
-        """Renders a representation of the board to stdout."""
+    def __str__(self) -> str:
+        res = ''
+
         for i in range(self.row_count - 1, -1, -1):
             row = list(map(color_to_letter, self.row(i)))
-            print(row)
+            res += str(row) + '\n'
 
-    def legal_moves(self) -> [int]:
+        return res
+
+    def __hash__(self) -> int:
+        return hash(str(self))
+
+    def print(self) -> None:
+        """Renders a representation of the board to stdout."""
+        print(str(self))
+
+    def legal_moves(self) -> list[int]:
         """Provides a list of columns with open gaps (i.e. columns that are not full)."""
         return list(
             map(
@@ -181,6 +190,10 @@ class Board:
         column = self.columns[col]
         lowest_none_index: Optional[int] = next(filter(lambda x: x[1] is None, enumerate(column)))[0]
         self.columns[col][lowest_none_index] = color
+
+    @property
+    def is_empty(self) -> bool:
+        return not any((bool(c) for c in self.columns))
 
     def is_full(self) -> bool:
         """Tells whether all the columns are filled."""
@@ -275,8 +288,7 @@ class Player(ABC):
 
 class MonkeyPlayer(Player):
     def next_move(self, board: Board, max_sec_per_step: float) -> int:
-        # sleep(DEFAULT_MOVE_TIMEOUT) # uncomment this to simulate timeouts/game defaulting
-        return choice(board.legal_moves())
+        return 0  # left
 
 
 class Game:
@@ -290,7 +302,8 @@ class Game:
 
     async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
+        # next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
+        next_move = self.active_player.next_move(self.board, self.max_sec_per_step)
         self.board.register_move(self.active_player.color, next_move)
         self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 
@@ -393,11 +406,3 @@ class Simulation:
             f"Red won {get_length('red')} games, while yellow won {get_length('yellow')} games (draws: {get_length('draw')}, timeouts: {get_length('red_timeout')} for red, {get_length('yellow_timeout')} for yellow)."
         )
 
-
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-
-    loop.run_until_complete(
-        # Simulation.single(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW))
-        Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
-    )
