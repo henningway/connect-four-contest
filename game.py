@@ -1,12 +1,12 @@
 import asyncio
 from abc import ABC
-from enum import Enum, IntEnum
+from enum import IntEnum
 from itertools import groupby, repeat
 from pedantic import in_subprocess
 from random import choice
 from typing import Optional
 
-DEFAULT_MOVE_TIMEOUT = 2  ## * 10 ** 9
+DEFAULT_MOVE_TIMEOUT = 3
 LAST_PRINT_LEN = 0
 
 
@@ -161,9 +161,6 @@ class Board:
 
         return res
 
-    def __hash__(self) -> int:
-        return hash(str(self))
-
     def print(self) -> None:
         """Renders a representation of the board to stdout."""
         print(str(self))
@@ -288,7 +285,8 @@ class Player(ABC):
 
 class MonkeyPlayer(Player):
     def next_move(self, board: Board, max_sec_per_step: float) -> int:
-        return 0  # left
+        # sleep(DEFAULT_MOVE_TIMEOUT) # uncomment this to simulate timeouts/game defaulting
+        return choice(board.legal_moves())
 
 
 class Game:
@@ -302,8 +300,7 @@ class Game:
 
     async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        # next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
-        next_move = self.active_player.next_move(self.board, self.max_sec_per_step)
+        next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
         self.board.register_move(self.active_player.color, next_move)
         self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 

@@ -32,11 +32,11 @@ class FarsBot(Player):
         elif max_sec_per_step > 5:
             depth = 6
         elif max_sec_per_step > 1:
-            depth = 5
-        elif max_sec_per_step > 0.5:
             depth = 4
-        else:
+        elif max_sec_per_step > 0.5:
             depth = 3
+        else:
+            depth = 1
 
         array = np.array(board.columns)
         array[array == None] = 0  # replace None with zeroes in memory
@@ -124,15 +124,56 @@ class FarsBot(Player):
 
         return score
 
+    @staticmethod
+    def winning_move(board, piece):
+        # Horizontal Nodes
+        for r in range(ROWS):
+            row = [int(i) for i in list(board[r, :])]
+            for c in range(COLUMNS - 3):
+                interval = row[c: c + LENGTH]
+                if interval.count(piece) == 4:
+                    return True
+
+        # Vertical Nodes
+        for c in range(COLUMNS):
+            column = [int(i) for i in list(board[:, c])]
+            for r in range(ROWS - 3):
+                interval = column[r: r + LENGTH]
+                if interval.count(piece) == 4:
+                    return True
+
+        # Positive Diagonal
+        for r in range(ROWS - 3):
+            for c in range(COLUMNS - 3):
+                interval = [board[r + i][c + i] for i in range(LENGTH)]
+                if interval.count(piece) == 4:
+                    return True
+
+        # Negative Diagonal
+        for r in range(ROWS - 3):
+            for c in range(COLUMNS - 3):
+                interval = [board[r + 3 - i][c + i] for i in range(LENGTH)]
+                if interval.count(piece) == 4:
+                    return True
+
+    def terminal_state(self, board, valid_moves):
+        return self.winning_move(board, self.ai_piece) or self.winning_move(board, self.p_piece) or len(valid_moves) == 0
+
     def minimax(self, board: np.array, depth: int, alpha: float, beta: float, maximize: bool) -> tuple[int | None, int]:
         """ Returns columns, value """
 
         valid_moves = self.available_moves(board)
-        
-        if depth == 0:
-            return None, self.evaluate(board)
-        
-        assert depth > 0, f'Depth: {depth}, invalid'
+        terminal = self.terminal_state(board, valid_moves)
+
+        if depth == 0 or terminal:
+
+            if terminal:
+                if self.winning_move(board, self.ai_piece):
+                    return None, 10000000000000
+                elif self.winning_move(board, self.p_piece):
+                    return None, (-1000000000000)
+            else:
+                return None, self.evaluate(board)
 
         if maximize:
             value = -math.inf
