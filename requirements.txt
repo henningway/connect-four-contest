@@ -1,0 +1,2 @@
+multiprocess==0.70.16
+pedantic==2.1.4

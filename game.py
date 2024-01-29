@@ -1,12 +1,13 @@
 from abc import ABC
 import asyncio
 from enum import Enum
-from functools import reduce
 from itertools import groupby, repeat
+from pedantic import in_subprocess
 from random import choice
+from time import sleep
 from typing import Optional
 
-
+DEFAULT_MOVE_TIMEOUT = 0.1
 LAST_PRINT_LEN = 0
 
 
@@ -46,7 +47,7 @@ def color_to_letter(color: Optional[Color], empty_char=".") -> str:
         return "Y"
 
 
-def letter_to_color(letter: str) -> Color:
+def letter_to_color(letter: str) -> Optional[Color]:
     if letter == " " or letter == ".":
         return None
     if letter == "R":
@@ -173,7 +174,7 @@ class Board:
         self.columns[col].append(color)
 
     def is_full(self) -> bool:
-        """Tells whether all of the columns are filled."""
+        """Tells whether all the columns are filled."""
         return len(self.legal_moves()) == 0
 
     def longest_sequence_specific(self, dim: Dim, index: int) -> Optional[dict]:
@@ -247,14 +248,19 @@ class Player(ABC):
         super().__init__()
         self.color = color
 
-    async def next_move(self, board: Board) -> int:
+    def next_move(self, board: Board) -> int:
         """Provides a column index to place a token of the player's color in."""
         pass
 
+    @in_subprocess
+    def subprocess_next_move(self, board: Board) -> int:
+        """Provides a column index to place a token of the player's color in."""
+        return self.next_move(board)
+
 
 class MonkeyPlayer(Player):
-    async def next_move(self, board: Board) -> int:
-        # await asyncio.sleep(0.001)
+    def next_move(self, board: Board) -> int:
+        # sleep(DEFAULT_MOVE_TIMEOUT) # uncomment this to simulate timeouts/game defaulting
         return choice(board.legal_moves())
 
 
@@ -268,7 +274,7 @@ class Game:
 
     async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        next_move = await self.active_player.next_move(self.board)
+        next_move = await self.active_player.subprocess_next_move(self.board)
         self.board.register_move(self.active_player.color, next_move)
         self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 
@@ -281,30 +287,36 @@ class Game:
         if self.default_winner is not None:
             return self.default_winner.color
 
-        longest_repeat = self.board.longest_sequence()
-        if longest_repeat is None:
+        longest = self.board.longest_sequence()
+        if longest is None:
             return None
-        return longest_repeat["color"] if longest_repeat["length"] >= 4 else None
+        return longest["color"] if longest["length"] >= 4 else None
 
     def default(self):
         self.default_winner = self.p1 if self.active_player is self.p2 else self.p2
 
 
 class Simulation:
+    """
+    Provides static methods for game simulation.
+
+    Players have a limited amount of time for each move (`max_ms_per_step`) and get timed out when they take longer,
+    defaulting the other player as winner of the game.
+    """
     @staticmethod
-    async def single(p1: Player, p2: Player) -> Color:
+    async def single(p1: Player, p2: Player, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT):
         """Runs a single game and provides the final board and winner on stdout. p1 is the starting player."""
         game = Game(p1, p2)
 
         try:
             while not game.is_finished():
-                await asyncio.wait_for(game.step(), 0.1)
+                await asyncio.wait_for(game.step(), max_sec_per_step)
         except asyncio.exceptions.TimeoutError:
             print(game.active_player.color, "timed out!")
             game.default()
 
         game.board.print()
-        
+
         print(
             "Winner:",
             game.winner(),
@@ -313,34 +325,55 @@ class Simulation:
 
     @staticmethod
     async def many(
-        p1: Player, p2: Player, runs: int, max_ms_per_step: int = 0.1
-    ) -> Game:
+            p1: Player, p2: Player, runs: int, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT
+    ):
         """
         Runs the given number of games of p1 against p2, with the starting player alternating each game. Provides the
-        result stastic (games won by p1, games won by p2 and number of draws) on stdout. Players have a limited amount 
-        of time for each move (`max_ms_per_step`) and get timed out when they take longer, defaulting the other player
-        as winner of the game.
+        result statistic (games won by p1, games won by p2 and number of draws) on stdout.
         """
-        winners = []
-        percentage = "0%"
+        wins = {
+            "red": 0,
+            "yellow": 0,
+            "draw": 0,
+            "red_timeout": 0,
+            "yellow_timeout": 0
+        }
 
         for i in range(0, runs):
-            percentage = f"{round(i/runs*100)}%"
+            percentage = f"{round(i / runs * 100)}%"
             reprint(percentage)
 
             game = Game(p1, p2) if i % 2 == 0 else Game(p2, p1)
 
             try:
                 while not game.is_finished():
-                    await asyncio.wait_for(game.step(), max_ms_per_step * 1000)
-            except:
-                game.default()
-            winners.append(game.winner())
+                    await asyncio.wait_for(game.step(), max_sec_per_step)
 
-        get_length = lambda color: len(list(filter(lambda w: w == color, winners)))
+                winner = game.winner()
+
+                match winner:
+                    case Color.RED:
+                        wins["red"] = wins["red"] + 1
+                    case Color.YELLOW:
+                        wins["yellow"] = wins["yellow"] + 1
+                    case None:
+                        wins["draw"] = wins["draw"] + 1
+            except asyncio.exceptions.TimeoutError:
+                game.default()
+
+                winner = game.winner()
+
+                match winner:
+                    case Color.RED:
+                        wins["red_timeout"] = wins["red_timeout"] + 1
+                    case Color.YELLOW:
+                        wins["yellow_timeout"] = wins["yellow_timeout"] + 1
+
+        def get_length(entry: str) -> int:
+            return wins[entry]
 
         print(
-            f"Red won {get_length(Color.RED)} games, while yellow won {get_length(Color.YELLOW)} games (draws: {get_length(None)})."
+            f"Red won {get_length('red')} games, while yellow won {get_length('yellow')} games (draws: {get_length('draw')}, timeouts: {get_length('red_timeout')} for red, {get_length('yellow_timeout')} for yellow)."
         )
 
 
