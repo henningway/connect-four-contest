@@ -75,7 +75,7 @@ def longest_color_repeat(sequence: [Optional[Color]]) -> [Color]:
     if len(words) == 0:
         return []
 
-    return max(map(longest_repeat, words))
+    return max(map(longest_repeat, words), key=len)
 
 
 def transpose(matrix: [[any]]) -> [[any]]:
