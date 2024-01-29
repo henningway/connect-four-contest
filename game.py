@@ -436,6 +436,8 @@ class Simulation:
 
 
 if __name__ == "__main__":
+    from player_team_faskoe import PlayerFaSKoe
+
     loop = asyncio.get_event_loop()
 
     loop.run_until_complete(
@@ -443,6 +445,6 @@ if __name__ == "__main__":
             HumanPlayer(Color.RED, False), HumanPlayer(Color.YELLOW, False)
         )
         # Simulation.single(HumanPlayer(Color.RED, False), MonkeyPlayer(Color.YELLOW))
-        # Simulation.single(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW))
-        # Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
+        # Simulation.single(PlayerFaSKoe(Color.YELLOW), MonkeyPlayer(Color.RED))
+        # Simulation.many(PlayerFaSKoe(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
     )
