@@ -293,6 +293,7 @@ class Game:
 class Simulation:
     @staticmethod
     async def single(p1: Player, p2: Player) -> Color:
+        """Runs a single game and provides the final board and winner on stdout. p1 is the starting player."""
         game = Game(p1, p2)
 
         try:
@@ -314,6 +315,12 @@ class Simulation:
     async def many(
         p1: Player, p2: Player, runs: int, max_ms_per_step: int = 0.1
     ) -> Game:
+        """
+        Runs the given number of games of p1 against p2, with the starting player alternating each game. Provides the
+        result stastic (games won by p1, games won by p2 and number of draws) on stdout. Players have a limited amount 
+        of time for each move (`max_ms_per_step`) and get timed out when they take longer, defaulting the other player
+        as winner of the game.
+        """
         winners = []
         percentage = "0%"
 
@@ -321,7 +328,7 @@ class Simulation:
             percentage = f"{round(i/runs*100)}%"
             reprint(percentage)
 
-            game = Game(p1, p2)
+            game = Game(p1, p2) if i % 2 == 0 else Game(p2, p1)
 
             try:
                 while not game.is_finished():
