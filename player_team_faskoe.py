@@ -205,9 +205,12 @@ class PlayerFaSKoe(Player):
             # Board is empty
             next_move = int(board.col_count / 2)
         elif (next_move := self.can_color_win(board=board, color=self.color)) is not None:
-            print("We can win")
+            # print("We can win")
+            ...
+            
         elif (next_move := self.can_color_win(board=board, color=self.opponent_color())) is not None:
-            print("We must stop the opponent")
+            # print("We must stop the opponent")
+            ...
         else:
             # best effort
             matrix = sorted(enumerate(self.calculate_matrix(board=board)), key=lambda x: x[1], reverse=True)

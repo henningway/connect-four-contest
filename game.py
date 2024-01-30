@@ -1,22 +1,21 @@
-from abc import ABC
 import asyncio
-from enum import Enum
+from abc import ABC
+from enum import IntEnum
 from itertools import groupby, repeat
 from pedantic import in_subprocess
 from random import choice
-from time import sleep
 from typing import Optional
 
 DEFAULT_MOVE_TIMEOUT = 0.1
 LAST_PRINT_LEN = 0
 
 
-class Color(Enum):
+class Color(IntEnum):
     RED = 1
     YELLOW = 2
 
 
-class Dim(Enum):
+class Dim(IntEnum):
     COL = 1
     ROW = 2
     DIAG_CLOCKWISE = 3
@@ -153,13 +152,20 @@ class Board:
         """
         return self.diags_counter_clockwise()[index]
 
-    def print(self):
-        """Renders a representation of the board to stdout."""
+    def __str__(self) -> str:
+        res = ""
+
         for i in range(self.row_count - 1, -1, -1):
             row = list(map(color_to_letter, self.row(i)))
-            print(row)
+            res += str(row) + "\n"
 
-    def legal_moves(self) -> [int]:
+        return res
+
+    def print(self) -> None:
+        """Renders a representation of the board to stdout."""
+        print(str(self))
+
+    def legal_moves(self) -> list[int]:
         """Provides a list of columns with open gaps (i.e. columns that are not full)."""
         return list(
             map(
@@ -186,6 +192,10 @@ class Board:
             filter(lambda x: x[1] is None, enumerate(column))
         )[0]
         self.columns[col][lowest_none_index] = color
+
+    @property
+    def is_empty(self) -> bool:
+        return not any((bool(c) for c in self.columns))
 
     def is_full(self) -> bool:
         """Tells whether all the columns are filled."""
@@ -437,14 +447,23 @@ class Simulation:
 
 if __name__ == "__main__":
     from player_team_faskoe import PlayerFaSKoe
+    from farsbot import FarsBot
 
     loop = asyncio.get_event_loop()
 
     loop.run_until_complete(
-        Simulation.single(
-            HumanPlayer(Color.RED, False), HumanPlayer(Color.YELLOW, False)
-        )
-        # Simulation.single(HumanPlayer(Color.RED, False), MonkeyPlayer(Color.YELLOW))
-        # Simulation.single(PlayerFaSKoe(Color.YELLOW), MonkeyPlayer(Color.RED))
-        # Simulation.many(PlayerFaSKoe(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
+        Simulation.single(HumanPlayer(Color.RED, False), MonkeyPlayer(Color.YELLOW))
+        # Simulation.single(HumanPlayer(Color.RED, False), PlayerFaSKoe(Color.YELLOW))
+        # Simulation.single(HumanPlayer(Color.RED, False), FarsBot(Color.YELLOW))
+        # Simulation.single(HumanPlayer(Color.RED, False), HumanPlayer(Color.YELLOW, False))
+        
+        # Simulation.single(MonkeyPlayer(Color.RED), PlayerFaSKoe(Color.YELLOW))
+        # Simulation.single(MonkeyPlayer(Color.RED), FarsBot(Color.YELLOW))
+        
+        # Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
+        
+        # Simulation.many(MonkeyPlayer(Color.RED), PlayerFaSKoe(Color.YELLOW), 100)
+        # Simulation.many(MonkeyPlayer(Color.RED), FarsBot(Color.YELLOW), 100)
+        
+        # Simulation.many(PlayerFaSKoe(Color.RED), FarsBot(Color.YELLOW), 100)
     )
