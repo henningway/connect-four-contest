@@ -165,8 +165,11 @@ class Board:
             map(
                 lambda value: value[0],
                 filter(
-                    lambda col: len(list(filter(lambda value: value is not None, col[1]))) < self.row_count,
-                    enumerate(self.columns)
+                    lambda col: len(
+                        list(filter(lambda value: value is not None, col[1]))
+                    )
+                    < self.row_count,
+                    enumerate(self.columns),
                 ),
             )
         )
@@ -179,7 +182,9 @@ class Board:
         """Puts a token of the given color into given column index."""
         assert self.is_legal_move(col), "Not a legal move."
         column = self.columns[col]
-        lowest_none_index: Optional[int] = next(filter(lambda x: x[1] is None, enumerate(column)))[0]
+        lowest_none_index: Optional[int] = next(
+            filter(lambda x: x[1] is None, enumerate(column))
+        )[0]
         self.columns[col][lowest_none_index] = color
 
     def is_full(self) -> bool:
@@ -191,11 +196,15 @@ class Board:
         sequence: [Optional[Color]] = (
             self.col
             if dim == Dim.COL
-            else self.row
-            if dim == Dim.ROW
-            else self.diag_clockwise
-            if dim == Dim.DIAG_CLOCKWISE
-            else self.diag_counter_clockwise
+            else (
+                self.row
+                if dim == Dim.ROW
+                else (
+                    self.diag_clockwise
+                    if dim == Dim.DIAG_CLOCKWISE
+                    else self.diag_counter_clockwise
+                )
+            )
         )(index)
 
         long_sequence: [str] = longest_color_repeat(sequence)
@@ -253,9 +262,19 @@ class Board:
 
 
 class Player(ABC):
-    def __init__(self, color: Color) -> None:
+    def __init__(self, color: Color, with_timeout: bool = True) -> None:
         super().__init__()
         self.color = color
+        self.with_timeout = with_timeout
+
+    async def get_next_move(self, board: Board, max_sec_per_step: float) -> int:
+        """
+        Picks and runs the correct choice of the sync/async versions of next_move.
+        """
+        if self.with_timeout:
+            return await self.subprocess_next_move(board, max_sec_per_step)
+        else:
+            return self.next_move(board, max_sec_per_step)
 
     def next_move(self, board: Board, max_sec_per_step: float) -> int:
         """
@@ -279,6 +298,21 @@ class MonkeyPlayer(Player):
         return choice(board.legal_moves())
 
 
+class HumanPlayer(Player):
+    def next_move(self, board: Board, max_sec_per_step: float) -> int:
+        while True:
+            try:
+                col = int(input(f"Pick a column (1-{board.row_count+1}): "))
+                if col in range(1, board.row_count + 2):
+                    break
+                else:
+                    print(f"Given number is not in range.")
+            except ValueError:
+                print("That's not a valid number. Please try again.")
+
+        return int(col) - 1
+
+
 class Game:
     def __init__(self, p1: Player, p2: Player, max_sec_per_step: float) -> None:
         self.board = Board()
@@ -290,8 +324,12 @@ class Game:
 
     async def step(self):
         """Prompts the active player to decide on its next move and switches the active player."""
-        next_move = await self.active_player.subprocess_next_move(self.board, self.max_sec_per_step)
+        self.board.print()
+        next_move = await self.active_player.get_next_move(
+            self.board, self.max_sec_per_step
+        )
         self.board.register_move(self.active_player.color, next_move)
+        print()
         self.active_player = self.p1 if self.active_player is self.p2 else self.p2
 
     def is_finished(self) -> bool:
@@ -321,7 +359,9 @@ class Simulation:
     """
 
     @staticmethod
-    async def single(p1: Player, p2: Player, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT):
+    async def single(
+        p1: Player, p2: Player, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT
+    ):
         """Runs a single game and provides the final board and winner on stdout. p1 is the starting player."""
         game = Game(p1, p2, max_sec_per_step)
 
@@ -342,25 +382,26 @@ class Simulation:
 
     @staticmethod
     async def many(
-            p1: Player, p2: Player, runs: int, max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT
+        p1: Player,
+        p2: Player,
+        runs: int,
+        max_sec_per_step: float = DEFAULT_MOVE_TIMEOUT,
     ):
         """
         Runs the given number of games of p1 against p2, with the starting player alternating each game. Provides the
         result statistic (games won by p1, games won by p2 and number of draws) on stdout.
         """
-        wins = {
-            "red": 0,
-            "yellow": 0,
-            "draw": 0,
-            "red_timeout": 0,
-            "yellow_timeout": 0
-        }
+        wins = {"red": 0, "yellow": 0, "draw": 0, "red_timeout": 0, "yellow_timeout": 0}
 
         for i in range(0, runs):
             percentage = f"{round(i / runs * 100)}%"
             reprint(percentage)
 
-            game = Game(p1, p2, max_sec_per_step) if i % 2 == 0 else Game(p2, p1, max_sec_per_step)
+            game = (
+                Game(p1, p2, max_sec_per_step)
+                if i % 2 == 0
+                else Game(p2, p1, max_sec_per_step)
+            )
 
             try:
                 while not game.is_finished():
@@ -398,6 +439,10 @@ if __name__ == "__main__":
     loop = asyncio.get_event_loop()
 
     loop.run_until_complete(
+        Simulation.single(
+            HumanPlayer(Color.RED, False), HumanPlayer(Color.YELLOW, False)
+        )
+        # Simulation.single(HumanPlayer(Color.RED, False), MonkeyPlayer(Color.YELLOW))
         # Simulation.single(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW))
-        Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
+        # Simulation.many(MonkeyPlayer(Color.RED), MonkeyPlayer(Color.YELLOW), 100)
     )
